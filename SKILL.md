@@ -1,5 +1,5 @@
 ---
-name: br-app-ai-safety-review
+name: ai-safety-guard-skill-br-app
 description: Realiza triagem tecnica inicial de seguranca, dados pessoais (contexto Brasil) e AI safety em codigo de banco de dados, autenticacao, guards de edge functions e fluxos com IA. Use quando o usuario pedir revisao de seguranca, auth, guards, edge functions, banco de dados, privacidade, dados pessoais ou AI safety em aplicacoes.
 ---
 
