@@ -1,10 +1,5 @@
 ---
 name: ai-safety-guard-skill-br-app
-description: Performs initial technical triage for security, personal data handling (Brazil context), and AI safety across database code, authentication, edge functions, and AI workflows. Use when asked to review security, auth, guards, edge functions, databases, privacy/PII, or AI safety in applications.
----
-
----
-name: ai-safety-guard-skill-br-app
 description: Performs initial technical triage of application security, personal data handling in the Brazilian context, authentication, authorization, database access, edge functions, and AI safety boundaries. Use when reviewing application code, APIs, databases, privacy, PII, or AI workflows.
 ---
 
