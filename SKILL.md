@@ -1,165 +1,128 @@
 ---
 name: ai-safety-guard-skill-br-app
-description: Realiza triagem técnica inicial de segurança de aplicações, tratamento de dados pessoais no contexto brasileiro, autenticação, autorização, acesso a bancos de dados, edge functions e limites de segurança de aplicações com IA. Utilize ao revisar código, APIs, bancos de dados, privacidade, dados pessoais ou fluxos de IA.
+description: Triagem inicial de segurança, privacidade (LGPD) e segurança de IA — além de diretrizes defensivas de implementação — para aplicações no Brasil, especialmente sistemas que tratam dados de pacientes e saúde (prontuário eletrônico), identificadores CPF/CRM, RLS no Supabase/Postgres, Edge Functions, buckets de storage, serviços em nuvem e fluxos de IA/RAG.
 ---
 
-# Revisão de Segurança de Aplicações e IA — Contexto Brasileiro
+# Revisão de Segurança e IA para Aplicações Brasileiras
 
-## Resumo
+## Propósito e escopo
 
-Uma skill para agentes de IA realizarem triagem técnica inicial de aplicações voltadas ao mercado brasileiro, abrangendo segurança de bancos de dados, tratamento de dados pessoais, autenticação e autorização, proteções em edge functions e limites de segurança em aplicações com IA.
+Realizar triagem técnica inicial baseada em evidências — ou aplicar diretrizes defensivas durante a implementação — para riscos de segurança de aplicações, privacidade e integração de IA em sistemas brasileiros, com atenção especial a dados de pacientes e informações médicas.
 
-A skill prioriza evidências verificáveis, confiança calibrada, limitações explícitas e recomendações direcionadas para verificação humana.
+Revisar controle de acesso a bancos de dados e storage (ex.: RLS no PostgreSQL/Supabase, RPCs, buckets), tratamento de dados pessoais e dados sensíveis de saúde, autenticação e autorização, APIs e edge functions, invariantes do domínio brasileiro (CPF/CRM, fusos horários, retenção vs. eliminação), responsabilidade compartilhada em nuvem, integrações de terceiros e segurança de IA no nível da aplicação.
 
-## Quando Utilizar
+**Fora do escopo:** diagnóstico clínico, recomendações de tratamento, tomada de decisão médica, acurácia clínica, parecer formal de conformidade com a LGPD, aconselhamento jurídico, testes de intrusão (*pentest*) ou auditoria abrangente de segurança. Caso a IA possa influenciar decisões clínicas, sinalize a necessidade de avaliação especializada de segurança clínica e regulatória.
 
-- Revisão inicial de consultas, políticas de acesso e tratamento de dados pessoais de usuários brasileiros.
-- Inspeção de autenticação, autorização, APIs, edge functions e funções de backend.
-- Avaliação de fluxos que envolvam entrada de dados do usuário, geração aumentada por recuperação (RAG) ou integração com modelos de IA.
-- Triagem inicial de riscos de segurança para desenvolvedores e revisores.
-- Identificação de riscos técnicos potencialmente relacionados aos requisitos da LGPD.
+## Modos de operação
 
-## Etapas da Revisão
+1. **Modo de Revisão e Triagem (padrão ao inspecionar código existente, PRs, schemas ou arquiteturas):** Siga o fluxo de revisão em 7 etapas abaixo e estruture a saída conforme o modelo **Achados e relatório**.
+2. **Modo de Implementação Defensiva (quando solicitado a gerar ou alterar código, migrations ou APIs):** Aplique proativamente todos os controles das seções 1 a 6 antes de escrever o código e registre ao final quaisquer premissas de segurança ou verificações operacionais pendentes.
 
-### 1. Mapeie as Fronteiras de Confiança
+## Fluxo de revisão
 
-Antes de revisar componentes individuais:
+### 1. Mapear o sistema e as fronteiras de confiança
 
-- Identifique entradas confiáveis e não confiáveis.
-- Mapeie os mecanismos de autenticação e autorização.
-- Identifique os caminhos de acesso ao banco de dados e integrações com serviços externos.
-- Identifique onde os dados pessoais entram, circulam e saem da aplicação.
-- Mapeie as interações entre usuários, lógica da aplicação, modelos de IA, sistemas de recuperação de contexto e ferramentas.
-- Identifique ações que possam modificar dados, acionar serviços externos ou afetar outros usuários.
+Antes de apontar problemas, estabeleça o que se sabe sobre:
 
-Não presuma que um controle de segurança está ausente apenas porque ele não aparece no trecho de código fornecido.
+- Usuários, perfis/papéis, *tenants* (clínicas, organizações, profissionais de saúde, equipe administrativa, pacientes), autenticação, autorização e identidades privilegiadas (`service_role`, chaves administrativas, webhooks).
+- Fluxos de dados: onde dados pessoais e de saúde entram, são armazenados, consultados, registrados em logs, exportados, enviados a provedores de IA, arquivados e excluídos.
+- Bancos de dados, APIs, buckets de storage, edge functions, handlers de backend, serviços externos, modelos de IA, fontes de recuperação (RAG) e ferramentas (*tools*).
+- Entradas confiáveis versus não confiáveis, ações que alteram estado e operações que afetam outros usuários ou *tenants*.
+- Serviços em nuvem e as responsabilidades de segurança do provedor, do responsável pela aplicação e de terceiros.
 
-### 2. Revise a Segurança do Banco de Dados e o Tratamento de Dados Pessoais
+Não infira que um controle está ausente apenas porque não aparece em um trecho isolado de código. Solicite contexto adicional relevante quando necessário.
 
-Inspecione as seguintes áreas quando aplicáveis:
+### 2. Revisar segurança da aplicação e do banco de dados
 
-**Exposição e minimização de dados**
-- Verifique se consultas ou respostas de APIs expõem mais dados pessoais do que o necessário.
-- Identifique possíveis exposições de e-mails, telefones, números de documentos de identificação, dados pessoais sensíveis ou registros de outros usuários.
-- Verifique se dados sensíveis ou conteúdo livre fornecido por usuários são incluídos em logs, caches, ferramentas de analytics ou payloads enviados a modelos de IA sem necessidade clara.
+- **Autorização e isolamento:** verifique titularidade e fronteiras de *tenant* antes de leituras, escritas e exclusões; inspecione políticas RLS (`USING` e `WITH CHECK`), chaves estrangeiras compostas, checagens de acesso em nível de objeto, funções `SECURITY DEFINER`, views, procedures e permissões de privilégio mínimo (`anon`, `authenticated`, `service_role`). Considere acesso indevido entre usuários, clínicas ou organizações (IDOR).
+- **Autenticação e acesso privilegiado:** distinga verificação de identidade de verificação de permissão; confirme que as checagens ocorrem antes do acesso aos dados, mudanças de estado e chamadas externas. Verifique se credenciais privilegiadas (`SUPABASE_SERVICE_ROLE_KEY`, segredos de assinatura) permanecem exclusivamente no servidor — nunca em bundles de frontend (`VITE_*`, `NEXT_PUBLIC_*`) — e avalie como operações com `service_role` impõem fronteiras de *tenant* ao contornar RLS.
+- **Consultas e storage:** procure construção insegura de queries / SQL injection (endurecimento de `search_path` em funções SQL); revise permissões de arquivos enviados, visibilidade de buckets (`public` vs. privado), caminhos de upload, tempo de expiração (TTL) de URLs assinadas e se os documentos herdam as fronteiras de acesso dos registros associados.
+- **Resistência a abuso:** avalie limites de taxa (*rate limits*), CAPTCHA/Turnstile em endpoints públicos, bloqueio contra força bruta em PINs ou tokens curtos, payloads excessivos, operações custosas não autenticadas e consistência de proteção entre endpoints.
+- **Exposição e sinais do domínio brasileiro:** verifique se APIs, queries, URLs, logs, caches, analytics, ferramentas de depuração, exportações ou payloads de IA expõem desnecessariamente e-mails, telefones, identificadores brasileiros (`CPF`, `CNPJ`, `CRM`, `CNS`), registros de saúde, texto livre ou credenciais. Verifique o tratamento de fuso horário (ex.: `America/Sao_Paulo` vs. demais fusos do Brasil) sempre que janelas de expiração, agendamentos ou carimbos temporais dependerem da hora local.
 
-**Controle de acesso e isolamento**
-- Verifique se o isolamento entre usuários ou tenants é aplicado antes da leitura, atualização ou exclusão de registros.
-- Inspecione políticas de Row Level Security (RLS), quando aplicável.
-- Identifique possíveis problemas de autorização em nível de objeto, incluindo acesso a recursos de outros usuários por meio da manipulação de identificadores.
-- Revise funções, views e stored procedures do banco de dados em busca de possíveis elevações de privilégio ou desvios dos controles de acesso esperados.
+### 3. Dar escrutínio adicional a dados de saúde
 
-**Segurança de consultas e armazenamento**
-- Procure construções inseguras de consultas e possíveis vulnerabilidades de SQL injection.
-- Inspecione permissões de armazenamento de arquivos, políticas de buckets e controles de acesso quando houver upload de arquivos.
-- Verifique se o acesso ao banco de dados segue o princípio do menor privilégio.
+Sob a LGPD (Art. 5º, II e Art. 11), dados referentes à saúde são dados pessoais sensíveis. Verifique:
 
-### 3. Revise Autenticação e Autorização
+- Classificação de dados e acesso com privilégio mínimo separando registros clínicos de dados administrativos/de agendamento entre pacientes, profissionais de saúde, recepção/administração, clínicas e organizações.
+- Isolamento do prontuário e autorização em todos os caminhos de acesso, incluindo imutabilidade pós-finalização de evoluções clínicas e prescrições/documentos assinados.
+- Acesso de emergência (*break-glass*): escopo restrito, justificado, registrado em log e auditável.
+- Tensão entre retenção e eliminação: a legislação brasileira de saúde (ex.: Lei nº 13.787/2018 e normas do CFM) exige guarda mínima de 20 anos para prontuários médicos, prevalecendo sobre pedidos genéricos de eliminação previstos no Art. 16 da LGPD. Verifique se registros clínicos estão protegidos contra exclusão física acidental ou não autorizada (utilizando arquivamento/bloqueio de acesso) enquanto dados não sujeitos à guarda obrigatória possuem ciclo de vida adequado.
+- Criptografia em trânsito e em repouso, responsabilidades de gestão de chaves, backups, restauração e integridade de assinaturas digitais (ex.: fluxos ICP-Brasil, verificação de hash).
+- Cópias ou divulgações desnecessárias em logs, analytics, ambientes de desenvolvimento, exportações, anexos e terceiros.
+- Se pseudonimização ou anonimização é apropriada; não presuma que dados pseudonimizados sejam automaticamente anônimos.
+- Dados de pacientes em prompts, contexto de modelos, recuperação (RAG), saídas e serviços externos de IA; avalie minimização, restrições de acesso, retenção e salvaguardas contratuais.
+- Se conteúdo gerado pode revelar informações de um paciente a outro usuário.
 
-- Diferencie autenticação (quem é o usuário) de autorização (o que ele tem permissão para fazer).
-- Verifique se identidade e permissões são validadas antes de consultar dados, modificar estados ou chamar serviços externos.
-- Identifique possíveis ausências de verificações de propriedade dos recursos e autorização das operações.
-- Verifique se credenciais privilegiadas permanecem no servidor e não são expostas em bundles do cliente, respostas de APIs ou logs.
-- Verifique se credenciais privilegiadas ignoram políticas de segurança do banco de dados, incluindo RLS, e se existem verificações explícitas de autorização que compensam esse comportamento.
-- Procure proteções básicas contra abuso, incluindo limitação de requisições, restrições de payloads excessivamente grandes e acesso não autenticado a operações de alto custo.
-- Considere se os controles de autenticação e autorização são aplicados consistentemente nos endpoints relevantes.
+Um plano corporativo (*enterprise*), declaração de privacidade do provedor ou certificação de segurança não comprova, por si só, que o tratamento realizado pela aplicação seja seguro ou adequado.
 
-### 4. Revise os Limites de Segurança da Aplicação com IA
+### 4. Revisar segurança de IA no nível da aplicação
 
-**Limites entre entradas e instruções**
-- Verifique se entradas de usuários e dados externos são tratados como conteúdo não confiável, e não como instruções de sistema.
-- Considere ataques de prompt injection diretos e indiretos por meio de mensagens de usuários, documentos recuperados, conteúdo da web e outras fontes externas.
-- Inspecione se o contexto recuperado pode conter instruções conflitantes com o comportamento esperado da aplicação.
+Avalie integração segura e proteção de dados, não correção clínica.
 
-**Vazamento de contexto e dados**
-- Verifique se o contexto fornecido ao modelo pode expor dados de outros usuários, informações internas, credenciais ou detalhes sensíveis da aplicação.
-- Revise histórico de conversas, sistemas de recuperação de contexto e integrações externas em busca de exposição indevida de informações.
-- Identifique dados pessoais enviados desnecessariamente a provedores externos de IA.
+- Trate entradas do usuário, textos livres clínicos, documentos recuperados, conteúdo web e dados externos como não confiáveis; considere *prompt injection* direto e indireto e conflitos de instrução.
+- Verifique contexto montado, filtros de RAG e histórico de conversa quanto a vazamento entre *tenants* ou usuários, exposição de dados de pacientes, informações internas, segredos e dados pessoais desnecessários.
+- Valide e restrinja saídas do modelo antes de utilizá-las em SQL, APIs, HTML, dados estruturados ou operações que alteram estado.
+- Garanta que ferramentas (*tools*) e ações imponham autorização de forma independente das decisões do modelo; exija aprovação humana para ações relevantes ou irreversíveis quando apropriado.
+- Considere renderização insegura, injeção na saída (*output injection*) e uso não intencional de ferramentas.
+- Se a funcionalidade de IA aparentar influenciar diagnóstico, tratamento ou decisões clínicas, interrompa a avaliação de segurança clínica e recomende análise por especialistas.
 
-**Saídas e ações do modelo**
-- Verifique se as saídas do modelo são validadas antes de serem utilizadas em consultas SQL, chamadas de API, renderização HTML ou operações que alterem estados.
-- Verifique se consultas geradas e saídas estruturadas são validadas e possuem restrições apropriadas.
-- Verifique se ferramentas e ações acionadas pelo modelo aplicam autorização independentemente das decisões do próprio modelo.
-- Identifique ações que possam exigir aprovação humana, especialmente operações irreversíveis ou com consequências significativas.
-- Procure formas inseguras de utilização das saídas, incluindo possíveis ataques de injeção por meio de conteúdo gerado.
+### 5. Aplicar o contexto brasileiro de privacidade
 
-### 5. Revise o Contexto de Privacidade Brasileiro (LGPD)
+Identifique sinais técnicos relevantes para a LGPD; não emita conclusões jurídicas.
 
-Identifique sinais técnicos e possíveis preocupações de privacidade relacionados à Lei Geral de Proteção de Dados Pessoais (LGPD).
+- Distinga dados pessoais comuns de dados pessoais sensíveis; trate dados de saúde como sensíveis.
+- Considere limitação de finalidade, minimização de dados, retenção excessiva ou indefinida (equilibrada com obrigações legais de guarda na área da saúde), compartilhamento com terceiros e transferência internacional de dados (ex.: APIs de IA ou nuvem hospedadas no exterior).
+- Verifique suporte técnico aos direitos dos titulares (acesso, correção, anonimização/bloqueio/eliminação quando juridicamente cabível), restrições de acesso e trilhas de auditoria/responsabilização (atribuição de `actor_id` mesmo em operações privilegiadas de backend).
+- Identifique exposição em logs, monitoramento, analytics e ambientes de desenvolvimento.
 
-Quando aplicável:
+Sinalize dúvidas sobre base legal, papéis de controlador/operador ou conformidade formal para revisão jurídica/de privacidade qualificada.
 
-- Diferencie dados pessoais comuns de dados pessoais sensíveis conforme a LGPD.
-- Identifique possíveis problemas relacionados à minimização de dados e à limitação do tratamento às finalidades pertinentes.
-- Procure indícios de retenção excessiva ou indefinida de dados pessoais.
-- Identifique dados pessoais compartilhados com provedores externos de IA, plataformas de analytics ou outros serviços terceirizados.
-- Sinalize possíveis transferências internacionais de dados para avaliação jurídica e de privacidade.
-- Identifique mecanismos técnicos relevantes para solicitações dos titulares, incluindo acesso, correção e exclusão de dados.
-- Considere se dados pessoais são expostos desnecessariamente em logs, sistemas de monitoramento ou ambientes de desenvolvimento.
+### 6. Avaliar responsabilidade compartilhada em nuvem e terceiros
 
-Essas verificações identificam sinais técnicos que podem exigir avaliação adicional. Elas não determinam descumprimento legal nem substituem orientação jurídica especializada.
+Para cada serviço gerenciado ou em nuvem, identifique controles geridos pelo provedor versus responsabilidades do cliente/aplicação. Consulte a documentação específica do serviço em vez de presumir.
 
-### 6. Apresente Resultados com Confiança Calibrada
+- **Provedor:** identifique controles operacionais e de infraestrutura geridos pelo provedor, bem como documentação ou garantias relevantes. Isso não comprova que a aplicação esteja segura.
+- **Equipe da aplicação / cliente:** revise lógica da aplicação, IAM, autorização, classificação de dados, permissões de banco e storage, segredos, configuração de criptografia, controles de rede e logging.
+- **Terceiros:** mapeie quais provedores de IA, analytics, identidade, assinatura digital, mensageria (ex.: WhatsApp), storage e outros processam, armazenam ou acessam dados da aplicação ou de pacientes; inspecione fluxos e permissões entre organizações.
+- **Responsabilização:** documente controles indefinidos ou sem responsável claro e evidências que precisam ser obtidas junto aos fornecedores.
 
-Para cada achado, forneça:
+Não confunda responsabilidade compartilhada em nuvem com os papéis jurídicos da LGPD. Um provedor de nuvem não é automaticamente operador sob a LGPD, nem o dono da aplicação é automaticamente controlador; os papéis dependem das decisões reais de tratamento e dos arranjos contratuais.
 
-- **Título:** Descrição objetiva do possível problema.
-- **Evidência no código fornecido:** Código, configuração ou comportamento relevante observado.
-- **Risco potencial:** O que pode acontecer caso o problema suspeito exista.
-- **Severidade:** Crítica, Alta, Média, Baixa ou Indeterminada.
-- **Confiança:** Alta, Média ou Baixa, de acordo com a força das evidências disponíveis.
-- **Status da verificação:** Confirmado nas evidências fornecidas, suspeito ou requer investigação adicional.
-- **Ação recomendada:** Mitigação ou etapa de investigação prática e objetiva.
-- **O que verificar:** Arquivos adicionais, middlewares, configurações, políticas ou comportamentos em execução necessários para estabelecer a existência do problema.
+### 7. Usar o OWASP Top 10:2025 como lente de revisão
 
-Mantenha severidade e confiança separadas:
+Mantenha o **OWASP Top 10:2025** em mente ao revisar riscos aplicáveis. Utilize-o como lista de verificação complementar para ampliar cobertura e organizar observações pertinentes — não como substituto para análise contextual, evidências, modelagem de ameaças ou verificação. Não presuma que todas as categorias se aplicam e não reporte uma vulnerabilidade apenas porque um item da lista não está visível em um trecho isolado. Para riscos específicos de IA, examine também as fronteiras de confiança e controles descritos nesta skill.
 
-- Severidade representa o impacto potencial do problema.
-- Confiança representa o quanto as evidências disponíveis sustentam o achado.
-- Status da verificação descreve o que foi efetivamente estabelecido.
+## Achados e relatório
 
-Não classifique uma vulnerabilidade como confirmada apenas porque um trecho de código não apresenta uma verificação esperada.
+Para cada achado no Modo de Revisão e Triagem, inclua:
 
-## Cuidados e Limitações
+1. **Título** — descrição concisa do problema.
+2. **Evidência** — código exato, configuração ou comportamento observado que sustenta o achado.
+3. **Impacto potencial** — o que pode acontecer e quem é afetado.
+4. **Severidade** — Crítica, Alta, Média, Baixa ou Indeterminada.
+5. **Confiança** — Alta, Média ou Baixa, conforme a qualidade da evidência.
+6. **Status** — Confirmado na evidência fornecida, Suspeito ou Requer investigação.
+7. **Ação recomendada** — mitigação mínima e prática ou próxima verificação.
+8. **Verificação adicional** — arquivos, middlewares, políticas, configurações, documentação de provedor ou comportamento em tempo de execução necessários.
 
-### Evite Falsos Positivos
+Mantenha estes conceitos separados:
+- **Severidade** estima o impacto potencial.
+- **Confiança** descreve o quão fortemente a evidência sustenta o achado.
+- **Status** indica o que foi efetivamente comprovado.
 
-- Não trate a ausência de verificações visíveis como vulnerabilidades confirmadas. A autorização pode ser aplicada por meio de middleware, políticas do banco de dados ou outra camada da aplicação.
-- Apresente riscos condicionais quando o contexto disponível estiver incompleto.
-- Solicite contexto adicional quando necessário, em vez de inventar detalhes da implementação.
-- Diferencie comportamentos observados de suposições e hipóteses.
+Exemplos de potencial alto impacto incluem exposição de prontuários entre *tenants*, acesso não autorizado a histórico médico, adulteração de receitas/documentos assinados ou divulgação descontrolada de dados identificáveis de pacientes a serviços externos. Trate esses casos apenas como sinais de triagem: atribua a severidade com base na exposição real, impacto e contexto, não por regra fixa.
 
-### Não Confunda Inspeção com Testes
+Organize os achados por severidade, mantendo confiança e status explícitos. Conclua com os principais riscos, incertezas ou contexto ausente, responsabilidades de nuvem ou terceiros a verificar, próximos passos priorizados e o escopo/limitações da revisão.
 
-- A inspeção de código, por si só, não comprova que uma vulnerabilidade pode ser explorada.
-- Não afirme que testes foram executados, que o comportamento em runtime foi verificado ou que houve um teste de intrusão (pentest), a menos que essas atividades tenham realmente ocorrido.
-- A revisão de um trecho de código não comprova a segurança da aplicação inteira.
-- Informe o escopo e as limitações das evidências utilizadas.
+## Disciplina de evidência e limitações
 
-### Evite Recomendações Genéricas
-
-- Explique o princípio de segurança que está em risco.
-- Prefira mitigações mínimas, legíveis e adequadas ao contexto.
-- Evite recomendar complexidade ou controles desnecessários, sem relação com o risco observado.
-- Não presuma tecnologias ou arquiteturas específicas sem evidências.
-
-### Limitações Importantes
-
-- Esta skill realiza triagem técnica inicial, não auditorias completas de segurança.
-- Não substitui testes de intrusão, revisões de arquitetura, modelagem de ameaças ou avaliações especializadas de segurança.
-- Não determina conformidade formal com a LGPD nem fornece aconselhamento jurídico.
-- Os achados devem ser verificados considerando o restante da base de código e, quando necessário, o comportamento real da aplicação.
-- A ausência de problemas identificados não comprova que uma aplicação é segura.
-
-## Formato Esperado da Resposta
-
-Organize os achados por severidade, preservando as informações de confiança e status da verificação.
-
-Finalize com:
-
-1. Principais riscos identificados.
-2. Incertezas importantes ou contexto ausente.
-3. Próximas etapas de verificação mais relevantes.
-4. Uma declaração clara sobre o escopo e as limitações da revisão.
-
-Priorize precisão, rastreabilidade e incerteza responsável em vez da quantidade de achados.
+- Separe fatos observados de suposições, hipóteses e recomendações.
+- Não classifique um problema suspeito como confirmado apenas porque um trecho visível não exibe uma validação; o controle pode existir em middleware, políticas do banco ou outra camada.
+- Declare riscos condicionais quando o contexto estiver incompleto; solicite a menor evidência adicional necessária.
+- Inspeção de código não comprova explorabilidade. Nunca afirme ter executado testes, verificado comportamento em produção ou realizado testes de intrusão sem tê-lo feito de fato.
+- Um trecho isolado ou a ausência de achados não comprova que a aplicação inteira seja segura.
+- Prefira recomendações específicas, mínimas e adequadas à arquitetura; não presuma tecnologias nem prescreva complexidade desnecessária.
+- Consulte a documentação específica de cada provedor antes de atribuir responsabilidades em nuvem.
+- Observações técnicas apoiam a avaliação de privacidade, mas não estabelecem conformidade com a LGPD nem substituem aconselhamento jurídico.
+- Esta skill destina-se apenas à triagem inicial; não substitui modelagem de ameaças, revisão arquitetural, testes de intrusão, avaliação especializada de segurança ou revisão clínica/regulatória.
